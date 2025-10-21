@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>LabVIEW UTF-8 輸入 v2.7</title>
+  <style>
+    body {
+      font-family: 'Microsoft JhengHei', Arial, sans-serif;
+      background: white;
+      padding: 0;
+      margin: 0;
+      overflow: hidden; /* 隱藏卷軸 */
+    }
+    html {
+      overflow: hidden; /* 隱藏HTML卷軸 */
+    }
+    input[type="text"] {
+      width: 270px;
+      height: 30px;
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #ccc;
+    }
+    /* 隱藏 placeholder 文字 */
+    input[type="text"]::placeholder {
+      color: transparent;
+    }
+    input[type="text"]::-webkit-input-placeholder {
+      color: transparent;
+    }
+    input[type="text"]::-moz-placeholder {
+      color: transparent;
+    }
+    input[type="text"]:-ms-input-placeholder {
+      color: transparent;
+    }
+    /* 隱藏IE瀏覽器的清除按鈕 - 更強力版本 */
+    input[type="text"]::-ms-clear {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+    }
+    /* 隱藏WebKit瀏覽器的清除按鈕 */
+    input[type="text"]::-webkit-search-cancel-button {
+      display: none !important;
+      -webkit-appearance: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+    }
+    /* 隱藏所有瀏覽器的清除按鈕 */
+    input[type="text"]::-ms-reveal {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+    }
+    /* 只禁用拖動，保留文字反白功能 */
+    body {
+      -webkit-touch-callout: none !important;
+      -webkit-tap-highlight-color: transparent !important;
+    }
+    /* 允許所有文字選擇和反白 */
+    * {
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      user-select: text !important;
+    }
+    #dataValue {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <input 
+    type="text" 
+    id="userInput" 
+    placeholder=""
+    onpaste="handlePaste(event)"
+    onkeydown="handleKeyDown(event)"
+    onkeyup="handleKeyUp(event)"
+    oninput="handleInput(event)"
+    onchange="handleChange(event)"
+  />
+  
+  <!-- 隱藏的資料容器，供 LabVIEW 讀取 -->
+  <div id="dataValue"></div>
+
+  <script>
+    var inputBox = document.getElementById('userInput');
+    var dataDiv = document.getElementById('dataValue');
+
+    // trim 函式 (相容舊版IE)
+    function trim(str) {
+      if (typeof str.trim !== 'undefined') {
+        return str.trim();
+      } else {
+        return str.replace(/^\s+|\s+$/g, '');
+      }
+    }
+
+    // 設定文字內容的相容函式 (相容舊版IE)
+    function setTextContent(element, text) {
+      if (element.textContent !== undefined) {
+        element.textContent = text;
+      } else {
+        element.innerText = text;
+      }
+    }
+
+    // Base64 編碼函式 (相容舊版IE)
+    function base64Encode(str) {
+      if (typeof btoa !== 'undefined') {
+        return btoa(unescape(encodeURIComponent(str)));
+      } else {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        var result = '';
+        var i = 0;
+        str = unescape(encodeURIComponent(str));
+        while (i < str.length) {
+          var a = str.charCodeAt(i++);
+          var b = i < str.length ? str.charCodeAt(i++) : 0;
+          var c = i < str.length ? str.charCodeAt(i++) : 0;
+          var bitmap = (a << 16) | (b << 8) | c;
+          result += chars.charAt((bitmap >> 18) & 63);
+          result += chars.charAt((bitmap >> 12) & 63);
+          result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+          result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
+        }
+        return result;
+      }
+    }
+
+    // Base64 解碼函式 (相容舊版IE)
+    function base64Decode(str) {
+      if (typeof atob !== 'undefined') {
+        try {
+          var decoded = decodeURIComponent(escape(atob(str)));
+          // 移除 null 字元和尾端空白
+          return decoded.replace(/\0/g, '').trim();
+        } catch (e) {
+          return '';
+        }
+      } else {
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        var result = '';
+        var i = 0;
+        str = str.replace(/[^A-Za-z0-9+/=]/g, '');
+        while (i < str.length) {
+          var encoded1 = chars.indexOf(str.charAt(i++));
+          var encoded2 = chars.indexOf(str.charAt(i++));
+          var encoded3 = chars.indexOf(str.charAt(i++));
+          var encoded4 = chars.indexOf(str.charAt(i++));
+          var bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
+          result += String.fromCharCode((bitmap >> 16) & 255);
+          if (encoded3 !== 64) result += String.fromCharCode((bitmap >> 8) & 255);
+          if (encoded4 !== 64) result += String.fromCharCode(bitmap & 255);
+        }
+        try {
+          var decoded = decodeURIComponent(escape(result));
+          // 移除 null 字元和尾端空白
+          return decoded.replace(/\0/g, '').trim();
+        } catch (e) {
+          // 移除 null 字元和尾端空白
+          return result.replace(/\0/g, '').trim();
+        }
+      }
+    }
+
+    // 方法1: 使用 URL Hash 通訊
+    function updateHash() {
+      // 如果是只讀模式，不更新 hash
+      if (inputBox.readOnly) {
+        return;
+      }
+      var text = inputBox.value;
+      if (text) {
+        var encoded = base64Encode(text);
+        window.location.hash = encoded;
+      } else {
+        window.location.hash = '';
+      }
+    }
+
+    // 方法2: 更新隱藏 div 的內容（供 LabVIEW 用 Document.getElementById 讀取）
+    function updateDataDiv() {
+      setTextContent(dataDiv, inputBox.value);
+      dataDiv.setAttribute('data-text', inputBox.value);
+    }
+
+    // 方法3: 儲存到 window 全域變數（供 execScript 讀取）
+    function updateGlobal() {
+      window.labviewData = inputBox.value;
+    }
+
+    // 監聽輸入變化 (使用舊版IE相容方式)
+    if (inputBox.addEventListener) {
+      inputBox.addEventListener('input', function() {
+        updateHash();
+        updateDataDiv();
+        updateGlobal();
+      });
+    } else if (inputBox.attachEvent) {
+      inputBox.attachEvent('onpropertychange', function() {
+        if (event.propertyName === 'value') {
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }
+      });
+    }
+
+    // 支援 Enter 鍵更新 (使用舊版IE相容方式)
+    if (inputBox.addEventListener) {
+      inputBox.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }
+      });
+    } else if (inputBox.attachEvent) {
+      inputBox.attachEvent('onkeypress', function(e) {
+        if (e.keyCode === 13) { // Enter 鍵
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }
+      });
+    }
+
+    // 提供清除功能（可由 LabVIEW 呼叫）
+    function clearInput() {
+      inputBox.value = '';
+      window.location.hash = '';
+      setTextContent(dataDiv, '');
+      window.labviewData = '';
+    }
+
+    // 提供設定功能（可由 LabVIEW 寫入）
+    function setInput(text) {
+      inputBox.value = text;
+      updateHash();
+      updateDataDiv();
+      updateGlobal();
+    }
+
+    // 提供重置功能（供 LabVIEW 重新導航前調用）
+    function resetForNavigation() {
+      // 清除所有狀態
+      inputBox.value = '';
+      inputBox.readOnly = false;
+      inputBox.style.backgroundColor = '';
+      inputBox.style.cursor = '';
+      
+      // 清除 hash
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.pathname + window.location.search);
+      } else {
+        window.location.hash = '';
+      }
+      
+      // 清除資料容器
+      setTextContent(dataDiv, '');
+      window.labviewData = '';
+      
+      // 重新聚焦到輸入框
+      inputBox.focus();
+    }
+
+    // 檢查 URL hash 並填入內容（顯示模式）
+    function checkUrlHash() {
+      var hash = window.location.hash;
+      if (hash && hash.length > 1) {
+        // 移除 # 符號
+        var base64Content = hash.substring(1);
+        if (base64Content) {
+          try {
+            // 解碼 base64 內容
+            var decodedText = base64Decode(base64Content);
+            if (decodedText) {
+              // 填入輸入框
+              inputBox.value = decodedText;
+              // 設為只讀模式
+              inputBox.readOnly = true;
+              inputBox.style.backgroundColor = '#f5f5f5';
+              inputBox.style.cursor = 'default';
+              // 更新其他資料容器
+              updateDataDiv();
+              updateGlobal();
+              
+              return true; // 表示是顯示模式
+            }
+          } catch (e) {
+            // 相容舊版瀏覽器，避免 console 未定義錯誤
+            if (typeof console !== 'undefined' && console.log) {
+              console.log('Base64 decode error:', e);
+            }
+          }
+        }
+      }
+      return false; // 表示是輸入模式
+    }
+
+    // 處理 WebView2 postMessage 通訊
+    function handlePostMessage(event) {
+      try {
+        var data = event.data;
+        
+        // 檢查是否為 base64 資料
+        if (data && typeof data === 'string') {
+          // 解碼 base64 內容
+          var decodedText = base64Decode(data);
+          if (decodedText !== null) {
+            // 填入輸入框
+            inputBox.value = decodedText;
+            // 設為只讀模式
+            inputBox.readOnly = true;
+            inputBox.style.backgroundColor = '#f5f5f5';
+            inputBox.style.cursor = 'default';
+            // 更新其他資料容器
+            updateDataDiv();
+            updateGlobal();
+            
+            // 發送回饋訊息給 WebView2
+            if (window.chrome && window.chrome.webview) {
+              window.chrome.webview.postMessage({
+                type: 'contentLoaded',
+                success: true,
+                message: 'Content loaded successfully'
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // 相容舊版瀏覽器，避免 console 未定義錯誤
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('PostMessage decode error:', e);
+        }
+        // 發送錯誤訊息給 WebView2
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.postMessage({
+            type: 'contentLoaded',
+            success: false,
+            message: 'Error decoding content: ' + e.message
+          });
+        }
+      }
+    }
+
+    // 處理貼上事件 (相容舊版IE)
+    function handlePaste(event) {
+      // 延遲執行以確保貼上內容已插入
+      setTimeout(function() {
+        updateHash();
+        updateDataDiv();
+        updateGlobal();
+      }, 10);
+    }
+
+    // 處理鍵盤按下事件 (支援所有快捷鍵)
+    function handleKeyDown(event) {
+      var keyCode = event.keyCode || event.which;
+      var ctrlKey = event.ctrlKey || event.metaKey;
+      
+      // Ctrl+C (複製)
+      if (ctrlKey && keyCode === 67) {
+        // 允許預設行為
+        return true;
+      }
+      
+      // Ctrl+V (貼上)
+      if (ctrlKey && keyCode === 86) {
+        // 延遲執行以確保貼上內容已插入
+        setTimeout(function() {
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }, 10);
+        return true;
+      }
+      
+      // Ctrl+A (全選)
+      if (ctrlKey && keyCode === 65) {
+        // 允許預設行為
+        return true;
+      }
+      
+      // Delete 鍵
+      if (keyCode === 46) {
+        // 延遲執行以確保刪除已完成
+        setTimeout(function() {
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }, 10);
+        return true;
+      }
+      
+      // Backspace 鍵
+      if (keyCode === 8) {
+        // 延遲執行以確保刪除已完成
+        setTimeout(function() {
+          updateHash();
+          updateDataDiv();
+          updateGlobal();
+        }, 10);
+        return true;
+      }
+      
+      // 允許其他鍵的預設行為
+      return true;
+    }
+
+    // 處理鍵盤放開事件
+    function handleKeyUp(event) {
+      // 延遲執行以確保所有鍵盤操作已完成
+      setTimeout(function() {
+        updateHash();
+        updateDataDiv();
+        updateGlobal();
+      }, 10);
+    }
+
+    // 處理輸入事件
+    function handleInput(event) {
+      updateHash();
+      updateDataDiv();
+      updateGlobal();
+    }
+
+    // 處理內容變化事件
+    function handleChange(event) {
+      updateHash();
+      updateDataDiv();
+      updateGlobal();
+    }
+
+    // 針對ActiveX Container的特殊處理
+    function disableActiveXScroll() {
+      // 完全禁用滾動事件
+      document.onmousewheel = function() { return false; };
+      document.onscroll = function() { return false; };
+      
+      // 禁用所有可能的滾動事件
+      if (document.addEventListener) {
+        document.addEventListener('wheel', function(e) { e.preventDefault(); }, false);
+        document.addEventListener('scroll', function(e) { e.preventDefault(); }, false);
+        document.addEventListener('touchmove', function(e) { e.preventDefault(); }, false);
+      }
+      
+      // 針對ActiveX Container的特殊處理
+      document.onmousedown = function(e) {
+        var event = e || window.event;
+        var target = event.target || event.srcElement;
+        
+        // 只允許在輸入框內操作
+        if (target === inputBox) {
+          // 在輸入框內時，禁用所有滾動
+          document.body.style.overflow = 'hidden';
+          return true;
+        }
+        
+        // 其他區域完全禁用
+        return false;
+      };
+      
+      document.onmouseup = function(e) {
+        // 滑鼠放開時恢復滾動設定
+        document.body.style.overflow = 'hidden';
+        return false;
+      };
+      
+      // 禁用右鍵選單
+      document.oncontextmenu = function() { return false; };
+      
+      // 強制設定body樣式
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+    }
+
+    // 初始化 (使用舊版IE相容方式)
+    if (window.addEventListener) {
+      window.addEventListener('load', function() {
+        // 檢查是否為顯示模式
+        var isDisplayMode = checkUrlHash();
+        if (!isDisplayMode) {
+          inputBox.focus();
+        }
+        disableActiveXScroll();
+      });
+      
+      // 添加 WebView2 postMessage 監聽器
+      window.addEventListener('message', handlePostMessage);
+    } else if (window.attachEvent) {
+      window.attachEvent('onload', function() {
+        // 檢查是否為顯示模式
+        var isDisplayMode = checkUrlHash();
+        if (!isDisplayMode) {
+          inputBox.focus();
+        }
+        disableActiveXScroll();
+      });
+      
+      // 舊版瀏覽器的 postMessage 監聽
+      window.attachEvent('onmessage', handlePostMessage);
+    } else {
+      window.onload = function() {
+        // 檢查是否為顯示模式
+        var isDisplayMode = checkUrlHash();
+        if (!isDisplayMode) {
+          inputBox.focus();
+        }
+        disableActiveXScroll();
+      };
+      
+      // 備用 postMessage 監聽
+      window.onmessage = handlePostMessage;
+    }
+  </script>
+</body>
+</html>
