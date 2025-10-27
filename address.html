@@ -167,10 +167,6 @@
 
     // 方法1: 使用 URL Hash 通訊
     function updateHash() {
-      // 如果是只讀模式，不更新 hash
-      if (inputBox.readOnly) {
-        return;
-      }
       var text = inputBox.value;
       if (text) {
         var encoded = base64Encode(text);
@@ -247,9 +243,6 @@
     function resetForNavigation() {
       // 清除所有狀態
       inputBox.value = '';
-      inputBox.readOnly = false;
-      inputBox.style.backgroundColor = '';
-      inputBox.style.cursor = '';
       
       // 清除 hash
       if (window.history && window.history.replaceState) {
@@ -279,10 +272,6 @@
             if (decodedText) {
               // 填入輸入框
               inputBox.value = decodedText;
-              // 設為只讀模式
-              inputBox.readOnly = true;
-              inputBox.style.backgroundColor = '#f5f5f5';
-              inputBox.style.cursor = 'default';
               // 更新其他資料容器
               updateDataDiv();
               updateGlobal();
@@ -312,10 +301,6 @@
           if (decodedText !== null) {
             // 填入輸入框
             inputBox.value = decodedText;
-            // 設為只讀模式
-            inputBox.readOnly = true;
-            inputBox.style.backgroundColor = '#f5f5f5';
-            inputBox.style.cursor = 'default';
             // 更新其他資料容器
             updateDataDiv();
             updateGlobal();
